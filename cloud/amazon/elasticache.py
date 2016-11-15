@@ -213,25 +213,26 @@ class ElastiCacheManager(object):
                 msg = "'%s' is currently deleting. Cannot create."
                 self.module.fail_json(msg=msg % self.name)
 
-        try:
-            response = self.conn.create_cache_cluster(cache_cluster_id=self.name,
-                                                      num_cache_nodes=self.num_nodes,
-                                                      cache_node_type=self.node_type,
-                                                      engine=self.engine,
-                                                      engine_version=self.cache_engine_version,
-                                                      cache_security_group_names=self.cache_security_groups,
-                                                      security_group_ids=self.security_group_ids,
-                                                      cache_parameter_group_name=self.cache_parameter_group,
-                                                      cache_subnet_group_name=self.cache_subnet_group,
-                                                      preferred_availability_zone=self.zone,
-                                                      port=self.cache_port)
-        except boto.exception.BotoServerError as e:
-            self.module.fail_json(msg=e.message)
+        if not self.module.check_mode:
+            try:
+                response = self.conn.create_cache_cluster(cache_cluster_id=self.name,
+                                                          num_cache_nodes=self.num_nodes,
+                                                          cache_node_type=self.node_type,
+                                                          engine=self.engine,
+                                                          engine_version=self.cache_engine_version,
+                                                          cache_security_group_names=self.cache_security_groups,
+                                                          security_group_ids=self.security_group_ids,
+                                                          cache_parameter_group_name=self.cache_parameter_group,
+                                                          cache_subnet_group_name=self.cache_subnet_group,
+                                                          preferred_availability_zone=self.zone,
+                                                          port=self.cache_port)
+            except boto.exception.BotoServerError as e:
+                self.module.fail_json(msg=e.message)
 
-        self._refresh_data()
+            self._refresh_data()
 
         self.changed = True
-        if self.wait:
+        if self.wait and not self.module.check_mode:
             self._wait_for_status('available')
         return True
 
@@ -250,15 +251,16 @@ class ElastiCacheManager(object):
                 msg = "'%s' is currently %s. Cannot delete."
                 self.module.fail_json(msg=msg % (self.name, self.status))
 
-        try:
-            response = self.conn.delete_cache_cluster(cache_cluster_id=self.name)
-        except boto.exception.BotoServerError as e:
-            self.module.fail_json(msg=e.message)
-        cache_cluster_data = response['DeleteCacheClusterResponse']['DeleteCacheClusterResult']['CacheCluster']
-        self._refresh_data(cache_cluster_data)
+        if not self.module.check_mode:
+            try:
+                response = self.conn.delete_cache_cluster(cache_cluster_id=self.name)
+            except boto.exception.BotoServerError as e:
+                self.module.fail_json(msg=e.message)
+            cache_cluster_data = response['DeleteCacheClusterResponse']['DeleteCacheClusterResult']['CacheCluster']
+            self._refresh_data(cache_cluster_data)
 
         self.changed = True
-        if self.wait:
+        if self.wait and not self.module.check_mode:
             self._wait_for_status('gone')
 
     def sync(self):
@@ -292,22 +294,22 @@ class ElastiCacheManager(object):
     def modify(self):
         """Modify the cache cluster. Note it's only possible to modify a few select options."""
         nodes_to_remove = self._get_nodes_to_remove()
-        try:
-            response = self.conn.modify_cache_cluster(cache_cluster_id=self.name,
-                                                  num_cache_nodes=self.num_nodes,
-                                                  cache_node_ids_to_remove=nodes_to_remove,
-                                                  cache_security_group_names=self.cache_security_groups,
-                                                  cache_parameter_group_name=self.cache_parameter_group,
-                                                  security_group_ids=self.security_group_ids,
-                                                  apply_immediately=True,
-                                                  engine_version=self.cache_engine_version)
-        except boto.exception.BotoServerError as e:
-            self.module.fail_json(msg=e.message)
-
-        self._refresh_data()
+        if not self.module.check_mode:
+            try:
+                response = self.conn.modify_cache_cluster(cache_cluster_id=self.name,
+                                                      num_cache_nodes=self.num_nodes,
+                                                      cache_node_ids_to_remove=nodes_to_remove,
+                                                      cache_security_group_names=self.cache_security_groups,
+                                                      cache_parameter_group_name=self.cache_parameter_group,
+                                                      security_group_ids=self.security_group_ids,
+                                                      apply_immediately=True,
+                                                      engine_version=self.cache_engine_version)
+            except boto.exception.BotoServerError as e:
+                self.module.fail_json(msg=e.message)
+                self._refresh_data()
 
         self.changed = True
-        if self.wait:
+        if self.wait and not self.module.check_mode:
             self._wait_for_status('available')
 
     def reboot(self):
@@ -326,16 +328,18 @@ class ElastiCacheManager(object):
 
         # Collect ALL nodes for reboot
         cache_node_ids = [cn['CacheNodeId'] for cn in self.data['CacheNodes']]
-        try:
-            response = self.conn.reboot_cache_cluster(cache_cluster_id=self.name,
-                                                      cache_node_ids_to_reboot=cache_node_ids)
-        except boto.exception.BotoServerError as e:
-            self.module.fail_json(msg=e.message)
+
+        if not self.module.check_mode:
+            try:
+                response = self.conn.reboot_cache_cluster(cache_cluster_id=self.name,
+                                                          cache_node_ids_to_reboot=cache_node_ids)
+            except boto.exception.BotoServerError as e:
+                self.module.fail_json(msg=e.message)
 
         self._refresh_data()
 
         self.changed = True
-        if self.wait:
+        if self.wait and not self.module.check_mode:
             self._wait_for_status('available')
 
     def get_info(self):
@@ -498,6 +502,7 @@ def main():
 
     module = AnsibleModule(
         argument_spec=argument_spec,
+        supports_check_mode = True,
     )
 
     if not HAS_BOTO:
