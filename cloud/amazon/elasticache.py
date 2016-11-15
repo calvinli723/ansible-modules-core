@@ -494,6 +494,7 @@ def main():
             cache_subnet_group    ={'required': False, 'default': None},
             cache_security_groups ={'required': False, 'default': [], 'type': 'list'},
             security_group_ids    ={'required': False, 'default': [], 'type': 'list'},
+            security_group_names  ={'required': False, 'default': [], 'type': 'list'},
             zone                  ={'required': False, 'default': None},
             wait                  ={'required': False, 'type' : 'bool', 'default': True},
             hard_modify           ={'required': False, 'type': 'bool', 'default': False}
@@ -520,6 +521,7 @@ def main():
     cache_subnet_group = module.params['cache_subnet_group']
     cache_security_groups = module.params['cache_security_groups']
     security_group_ids = module.params['security_group_ids']
+    security_group_names = module.params['security_group_names']
     zone = module.params['zone']
     wait = module.params['wait']
     hard_modify = module.params['hard_modify']
@@ -534,6 +536,19 @@ def main():
     if not region:
         module.fail_json(msg=str("Either region or AWS_REGION or EC2_REGION environment variable or boto config aws_region or ec2_region must be set."))
 
+    if security_group_names:
+        conn = boto.connect_ec2()
+        security_groups = [x for x in conn.get_all_security_groups() \
+                              if x.name in security_group_names]
+        unique_security_group_names = set([x.name for x in security_groups])
+        if len(security_groups) > len(unique_security_group_names):
+            module.fail_json(msg=str("Security group names given do not name unique "
+                                     "security groups; i.e. there may be security "
+                                     "groups with the same name across different VPCs.") )
+        if len(unique_security_group_names) < len(security_group_names):
+            module.fail_json(msg=str("One or more security groups named does not exist."))
+        else:
+            security_group_ids = [x.id for x in security_groups]
     elasticache_manager = ElastiCacheManager(module, name, engine,
                                              cache_engine_version, node_type,
                                              num_nodes, cache_port,
